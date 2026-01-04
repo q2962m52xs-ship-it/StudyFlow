@@ -152,6 +152,7 @@ const App: React.FC = () => {
       case 'schedule':
         return <Schedule 
             courses={courses} 
+            setCourses={setCourses}
             schedule={schedule} 
             setSchedule={setSchedule} 
             sessions={classSessions}

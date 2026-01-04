@@ -5,6 +5,7 @@ import { parseScheduleImage } from '../services/geminiService';
 
 interface ScheduleProps {
   courses: Course[];
+  setCourses: React.Dispatch<React.SetStateAction<Course[]>>;
   schedule: ScheduleItem[];
   setSchedule: React.Dispatch<React.SetStateAction<ScheduleItem[]>>;
   sessions: ClassSession[];
@@ -13,7 +14,7 @@ interface ScheduleProps {
   setLectures: React.Dispatch<React.SetStateAction<Lecture[]>>;
 }
 
-const Schedule: React.FC<ScheduleProps> = ({ courses, schedule, setSchedule, sessions, onMarkAttendance, lectures, setLectures }) => {
+const Schedule: React.FC<ScheduleProps> = ({ courses, setCourses, schedule, setSchedule, sessions, onMarkAttendance, lectures, setLectures }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isAdding, setIsAdding] = useState(false);
   
@@ -154,68 +155,68 @@ const Schedule: React.FC<ScheduleProps> = ({ courses, schedule, setSchedule, ses
                     const extractedClasses = await parseScheduleImage(base64String);
                     
                     if (extractedClasses && extractedClasses.length > 0) {
-                        // We need to merge these into state.
-                        // 1. Identify or Create Courses
-                        const newScheduleItems: ScheduleItem[] = [];
-                        // We'll modify courses via prop mutation pattern for simplicity here since we don't have setCourses directly, 
-                        // but actually `courses` is passed as prop. 
-                        // Wait, we can't update courses if we don't have setCourses.
-                        // Checking props... ScheduleProps has setLectures and setSchedule, but NOT setCourses.
-                        // I will alert the user if I can't add courses, OR I will assume the parent passes setCourses.
-                        // Actually, looking at App.tsx, <Schedule> is passed setSchedule but NOT setCourses.
-                        // I need to request the AI to add setCourses to the props in the XML response.
+                        // Logic to merge into schedule AND create missing courses
+                        const existingCoursesMap = new Map<string, Course>();
+                        courses.forEach(c => existingCoursesMap.set(c.title.toLowerCase(), c));
                         
-                        // BUT, for now, let's just alert that we found items and maybe fail gracefully if course doesn't exist?
-                        // No, the user wants it to work. I must add setCourses to props.
+                        const coursesToAdd: Course[] = [];
                         
-                        alert(`Found ${extractedClasses.length} classes. Please note: This feature currently maps to existing courses only.`);
-                        
-                        // For this iteration, let's try to map to existing courses by fuzzy name match
-                        // If no match, we skip (or ideally create, but I need to change App.tsx for that).
-                        // Let's modify ScheduleProps to include setCourses in the next step or hack it by using the passed props.
-                        // Actually, looking at App.tsx, I can see what I can change.
-                        // I will stick to mapping to existing courses for now to avoid breaking App.tsx interface 
-                        // or I will update App.tsx in a separate block if I really need to.
-                        // Let's assume for this "change" request I only touch Schedule.tsx and geminiService.
-                        // I'll do a simple name match.
-                        
-                        const newItems = extractedClasses.map((cls: any) => {
-                            // Simple fuzzy match
-                            const existingCourse = courses.find(c => 
-                                c.title.toLowerCase().includes(cls.courseTitle.toLowerCase()) || 
-                                cls.courseTitle.toLowerCase().includes(c.title.toLowerCase())
-                            );
-                            
-                            if (existingCourse) {
-                                return {
-                                    id: Date.now().toString() + Math.random(),
-                                    courseId: existingCourse.id,
-                                    dayOfWeek: cls.dayOfWeek,
-                                    startTime: cls.startTime,
-                                    endTime: cls.endTime,
-                                    type: cls.type as any,
-                                    location: cls.location
-                                } as ScheduleItem;
-                            }
-                            return null;
-                        }).filter(Boolean) as ScheduleItem[];
+                        const newScheduleItems = extractedClasses.map((cls: any) => {
+                            const lowerTitle = cls.courseTitle.toLowerCase();
+                            let courseId = '';
 
-                        if (newItems.length > 0) {
-                            setSchedule(prev => [...prev, ...newItems]);
-                            alert(`Successfully added ${newItems.length} classes to your schedule!`);
-                        } else {
-                            alert("Could not match scanned classes to your existing courses. Please create the courses first.");
+                            if (existingCoursesMap.has(lowerTitle)) {
+                                courseId = existingCoursesMap.get(lowerTitle)!.id;
+                            } else {
+                                // Check if we already queued it in this batch
+                                const queued = coursesToAdd.find(c => c.title.toLowerCase() === lowerTitle);
+                                if (queued) {
+                                    courseId = queued.id;
+                                } else {
+                                    // Create new course
+                                    const newCourse: Course = {
+                                        id: Date.now().toString() + Math.random().toString(),
+                                        title: cls.courseTitle,
+                                        color: getRandomColor(),
+                                        staff: [],
+                                        resources: []
+                                    };
+                                    coursesToAdd.push(newCourse);
+                                    courseId = newCourse.id;
+                                }
+                            }
+
+                            return {
+                                id: Date.now().toString() + Math.random(),
+                                courseId: courseId,
+                                dayOfWeek: cls.dayOfWeek,
+                                startTime: cls.startTime,
+                                endTime: cls.endTime,
+                                type: cls.type,
+                                location: cls.location
+                            } as ScheduleItem;
+                        });
+
+                        // Batch updates
+                        if (coursesToAdd.length > 0) {
+                            setCourses(prev => [...prev, ...coursesToAdd]);
                         }
+                        setSchedule(prev => [...prev, ...newScheduleItems]);
+                        
+                        const msg = coursesToAdd.length > 0 
+                            ? `Success! Added ${coursesToAdd.length} new courses and ${newScheduleItems.length} classes to your schedule.`
+                            : `Success! Added ${newScheduleItems.length} classes to your existing courses.`;
+                        alert(msg);
+
                     } else {
-                        alert("No classes found in the image.");
+                        alert("No classes found in the image. Please ensure the image is clear.");
                     }
                 }
             } catch (error) {
                 console.error(error);
-                alert("Failed to analyze schedule.");
+                alert("Failed to analyze schedule. Please try again.");
             } finally {
                 setIsScanning(false);
-                // Reset input
                 if (fileInputRef.current) fileInputRef.current.value = '';
             }
         };
@@ -253,7 +254,8 @@ const Schedule: React.FC<ScheduleProps> = ({ courses, schedule, setSchedule, ses
         type="file" 
         ref={fileInputRef} 
         onChange={handleFileUpload} 
-        accept="image/*" 
+        accept="image/*"
+        capture="environment"
         className="hidden" 
       />
       
