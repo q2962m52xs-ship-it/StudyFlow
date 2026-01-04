@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { onAuthStateChanged, User, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from './firebaseConfig';
+import { storage } from './services/storage';
 import Auth from './components/Auth';
 import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
@@ -19,10 +17,10 @@ import { LogOut, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
   // Auth State
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [dataLoaded, setDataLoaded] = useState(false);
+  const [user, setUser] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // App Data State
   const [currentView, setView] = useState<ViewState>({ type: 'dashboard' });
   const [tasks, setTasks] = useState<Task[]>([]);
   const [sessions, setSessions] = useState<StudySession[]>([]);
@@ -31,77 +29,53 @@ const App: React.FC = () => {
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [classSessions, setClassSessions] = useState<ClassSession[]>([]);
 
-  // 1. Listen for Auth Changes
+  // 1. Initial Load - Check for active session
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      setAuthLoading(false);
-      
-      if (currentUser) {
-        // 2. Fetch User Data
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        
-        // Listen to document updates in real-time
-        const unsubDoc = onSnapshot(userDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setTasks(data.tasks || []);
-                setCourses(data.courses || []);
-                setLectures(data.lectures || []);
-                setSessions(data.sessions || []);
-                setSchedule(data.schedule || []);
-                setClassSessions(data.classSessions || []);
-                setDataLoaded(true);
-            } else {
-                // New user - create document
-                setDoc(userDocRef, {
-                    tasks: [],
-                    courses: [],
-                    lectures: [],
-                    sessions: [],
-                    schedule: [],
-                    classSessions: []
-                });
-                setDataLoaded(true);
-            }
-        });
-        return () => unsubDoc();
-      } else {
-        setDataLoaded(false);
-        // Clear state on logout
-        setTasks([]);
-        setCourses([]);
-        setLectures([]);
-        setSchedule([]);
-      }
-    });
-
-    return () => unsubscribe();
+    const currentUser = storage.getCurrentUser();
+    if (currentUser) {
+      handleLogin(currentUser);
+    } else {
+      setLoading(false);
+    }
   }, []);
 
-  // 3. Save Data Changes (Debounced ideally, but simple effect here)
-  // We use a flag 'dataLoaded' to ensure we don't overwrite DB with empty initial state
+  // 2. Data Persistence - Auto save when state changes
   useEffect(() => {
-    if (user && dataLoaded) {
-      const saveUserData = async () => {
-        const userDocRef = doc(db, 'users', user.uid);
-        try {
-            await updateDoc(userDocRef, {
-                tasks,
-                courses,
-                lectures,
-                sessions,
-                schedule,
-                classSessions
-            });
-        } catch (e) {
-            console.error("Error saving data:", e);
-        }
-      };
-      saveUserData();
+    if (user) {
+        storage.saveUserData(user.uid, {
+            tasks,
+            courses,
+            lectures,
+            sessions,
+            schedule,
+            classSessions
+        });
     }
-  }, [tasks, courses, lectures, sessions, schedule, classSessions, user, dataLoaded]);
+  }, [tasks, courses, lectures, sessions, schedule, classSessions, user]);
 
+  const handleLogin = (userData: any) => {
+      setUser(userData);
+      const data = storage.getUserData(userData.uid);
+      setTasks(data.tasks);
+      setCourses(data.courses);
+      setLectures(data.lectures);
+      setSessions(data.sessions);
+      setSchedule(data.schedule);
+      setClassSessions(data.classSessions);
+      setLoading(false);
+  };
+
+  const handleLogout = () => {
+      storage.logout();
+      setUser(null);
+      // Reset state
+      setTasks([]);
+      setCourses([]);
+      setLectures([]);
+      setSchedule([]);
+      setSessions([]);
+      setClassSessions([]);
+  };
 
   const handleSessionComplete = (minutes: number) => {
     const newSession: StudySession = {
@@ -238,7 +212,7 @@ const App: React.FC = () => {
     }
   };
 
-  if (authLoading) {
+  if (loading) {
       return (
           <div className="h-screen flex items-center justify-center bg-slate-50">
               <Loader2 className="w-10 h-10 animate-spin text-primary-600" />
@@ -247,7 +221,7 @@ const App: React.FC = () => {
   }
 
   if (!user) {
-      return <Auth />;
+      return <Auth onLogin={handleLogin} />;
   }
 
   return (
@@ -255,8 +229,17 @@ const App: React.FC = () => {
       <div className="hidden md:flex flex-col border-r border-slate-200">
           <Sidebar currentView={currentView} setView={setView} />
           <div className="p-4 bg-white border-t border-slate-100">
+             <div className="flex items-center gap-3 px-4 py-3 mb-2 bg-slate-50 rounded-lg">
+                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
+                    {user.displayName.charAt(0).toUpperCase()}
+                </div>
+                <div className="overflow-hidden">
+                    <p className="text-sm font-bold text-slate-700 truncate">{user.displayName}</p>
+                    <p className="text-xs text-slate-500">Free Plan</p>
+                </div>
+             </div>
              <button 
-                onClick={() => signOut(auth)}
+                onClick={handleLogout}
                 className="flex items-center gap-2 text-slate-500 hover:text-rose-600 transition-colors w-full px-4 py-2 rounded-lg hover:bg-rose-50 font-medium text-sm"
              >
                  <LogOut className="w-4 h-4" /> Sign Out
@@ -268,20 +251,13 @@ const App: React.FC = () => {
         {/* Mobile Header */}
         <div className="md:hidden bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
            <span className="text-lg font-bold text-slate-800">Study Flow</span>
-           <button onClick={() => signOut(auth)} className="text-slate-400">
+           <button onClick={handleLogout} className="text-slate-400">
                <LogOut className="w-5 h-5" />
            </button>
         </div>
 
         <div className="flex-1 overflow-hidden">
-            {!dataLoaded ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-4">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
-                    <p>Loading your study space...</p>
-                </div>
-            ) : (
-                renderContent()
-            )}
+            {renderContent()}
         </div>
 
         <MobileNav currentView={currentView} setView={setView} />

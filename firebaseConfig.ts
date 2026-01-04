@@ -1,9 +1,14 @@
+// Firebase is currently disabled in favor of LocalStorage for immediate usage.
+// To restore Firebase:
+// 1. Uncomment the code below
+// 2. Add your API keys
+// 3. Update App.tsx and Auth.tsx to use firebase imports instead of services/storage
+
+/*
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// TODO: Replace the following with your app's Firebase project configuration
-// You can get this from the Firebase Console -> Project Settings -> General -> Your apps
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY_HERE",
   authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
@@ -17,3 +22,8 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
+*/
+
+export const auth = {};
+export const db = {};
+export const googleProvider = {};
