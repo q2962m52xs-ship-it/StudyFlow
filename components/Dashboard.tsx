@@ -47,16 +47,23 @@ const Dashboard: React.FC<DashboardProps> = ({
       const newTask: Task = {
           id: Date.now().toString(),
           title: newTaskTitle,
-          completed: false,
+          status: 'Not Started',
+          priority: 'Medium',
           category: 'General',
-          dueDate: dateStr
+          dueDate: dateStr,
+          subtasks: []
       };
       setTasks([...tasks, newTask]);
       setNewTaskTitle('');
   };
 
   const toggleTask = (id: string) => {
-      setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+      setTasks(tasks.map(t => {
+          if (t.id === id) {
+              return { ...t, status: t.status === 'Done' ? 'Not Started' : 'Done' };
+          }
+          return t;
+      }));
   };
 
   const toggleBacklogItemCompletion = (id: string) => {
@@ -266,10 +273,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                         </form>
 
                         <div className="space-y-2 flex-1 overflow-y-auto no-scrollbar max-h-[500px]">
-                            {tasks.filter(t => !t.completed).length === 0 && (
+                            {tasks.filter(t => t.status !== 'Done').length === 0 && (
                                 <p className="text-center text-slate-400 text-sm py-4">No pending tasks!</p>
                             )}
-                            {tasks.filter(t => !t.completed).map(task => (
+                            {tasks.filter(t => t.status !== 'Done').map(task => (
                                 <div key={task.id} className="flex items-start gap-3 p-2 hover:bg-slate-50 rounded-lg group">
                                     <button onClick={() => toggleTask(task.id)} className="mt-0.5 text-slate-300 hover:text-emerald-500 transition-colors">
                                         <Circle className="w-4 h-4" />
@@ -277,10 +284,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                                     <span className="text-sm text-slate-700 flex-1">{task.title}</span>
                                 </div>
                             ))}
-                             {tasks.filter(t => t.completed).length > 0 && (
+                             {tasks.filter(t => t.status === 'Done').length > 0 && (
                                 <div className="pt-4 border-t border-slate-100 mt-2">
                                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Completed</p>
-                                    {tasks.filter(t => t.completed).map(task => (
+                                    {tasks.filter(t => t.status === 'Done').map(task => (
                                         <div key={task.id} className="flex items-start gap-3 p-2 opacity-50">
                                             <CheckCircle className="w-4 h-4 text-emerald-500" />
                                             <span className="text-sm text-slate-700 flex-1 line-through">{task.title}</span>
@@ -363,7 +370,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                      <button onClick={() => removeFromPlan(item.id)}><X className="w-3 h-3 text-rose-400" /></button>
                                  </div>
                              ))}
-                             {tasks.filter(t => !t.completed).map(task => (
+                             {tasks.filter(t => t.status !== 'Done').map(task => (
                                  <div key={task.id} className="p-2 border border-slate-100 bg-white rounded-lg text-sm flex items-center gap-2 shadow-sm">
                                      <CheckSquare className="w-4 h-4 text-slate-400" />
                                      <span className="flex-1 truncate text-slate-700">{task.title}</span>

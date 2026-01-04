@@ -44,10 +44,12 @@ const Lecture: React.FC<LectureProps> = ({ lecture, course, onUpdate, onAddTasks
         const newTasks: Task[] = result.tasks.map(t => ({
           id: Date.now() + Math.random().toString(),
           title: t,
-          completed: false,
+          status: 'Not Started',
+          priority: 'Medium',
           category: course.title,
           courseId: course.id,
-          dueDate: new Date().toISOString().split('T')[0]
+          dueDate: new Date().toISOString().split('T')[0],
+          subtasks: []
         }));
         onAddTasks(newTasks);
       }

@@ -1,12 +1,31 @@
 
-export interface Task {
+export type TaskStatus = 'Not Started' | 'In Progress' | 'Stuck' | 'Done';
+export type TaskPriority = 'Low' | 'Medium' | 'High';
+
+export interface Subtask {
   id: string;
   title: string;
   completed: boolean;
-  category: string;
+}
+
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  type: 'file' | 'image' | 'link';
+  url: string;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  category: string; // Used as Course Name usually
   dueDate?: string;
   description?: string;
   courseId?: string;
+  subtasks: Subtask[];
+  attachments?: TaskAttachment[];
 }
 
 export interface CourseStaff {

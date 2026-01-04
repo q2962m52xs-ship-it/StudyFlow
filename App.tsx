@@ -111,7 +111,7 @@ const App: React.FC = () => {
       case 'focus':
         return <Timer onSessionComplete={handleSessionComplete} />;
       case 'tasks':
-        return <Tasks tasks={tasks} setTasks={setTasks} setView={setView} />;
+        return <Tasks tasks={tasks} setTasks={setTasks} setView={setView} courses={courses} />;
       case 'task_detail': {
         const task = tasks.find(t => t.id === currentView.taskId);
         if (!task) return <div>Task not found</div>;

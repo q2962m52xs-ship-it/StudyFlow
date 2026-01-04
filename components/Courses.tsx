@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Book, ChevronRight, FileText, Calendar, ArrowLeft, Users, Paperclip, AlertCircle, Link as LinkIcon, Trash2, CheckCircle2, Video, CheckSquare, Circle, CheckCircle, StickyNote } from 'lucide-react';
+import { Plus, Book, ChevronRight, FileText, Calendar, ArrowLeft, Users, Paperclip, AlertCircle, Link as LinkIcon, Trash2, CheckCircle2, Video, CheckSquare, Circle, CheckCircle, StickyNote, Palette } from 'lucide-react';
 import { Course, Lecture, ViewState, CourseStaff, CourseResource, Task } from '../types';
 
 interface CoursesProps {
@@ -35,11 +35,17 @@ const Courses: React.FC<CoursesProps> = ({ courses, lectures, setCourses, setLec
   // Course Task state
   const [newCourseTaskTitle, setNewCourseTaskTitle] = useState('');
 
+  // Color Palette
+  const availableColors = [
+      'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 
+      'bg-rose-500', 'bg-amber-500', 'bg-indigo-500', 
+      'bg-cyan-500', 'bg-teal-500'
+  ];
+
   const handleAddCourse = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCourseTitle.trim()) return;
-    const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-rose-500', 'bg-amber-500', 'bg-indigo-500'];
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    const randomColor = availableColors[Math.floor(Math.random() * availableColors.length)];
     
     const newCourse: Course = {
       id: Date.now().toString(),
@@ -72,17 +78,19 @@ const Courses: React.FC<CoursesProps> = ({ courses, lectures, setCourses, setLec
     const newTask: Task = {
       id: Date.now().toString(),
       title: newCourseTaskTitle,
-      completed: false,
+      status: 'Not Started',
+      priority: 'Medium',
       category: courseTitle,
       courseId: courseId,
-      dueDate: new Date().toISOString().split('T')[0]
+      dueDate: new Date().toISOString().split('T')[0],
+      subtasks: []
     };
     setTasks([...tasks, newTask]);
     setNewCourseTaskTitle('');
   };
 
   const toggleTask = (id: string) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+    setTasks(tasks.map(t => t.id === id ? { ...t, status: t.status === 'Done' ? 'Not Started' : 'Done' } : t));
   };
 
   const deleteTask = (id: string) => {
@@ -91,6 +99,10 @@ const Courses: React.FC<CoursesProps> = ({ courses, lectures, setCourses, setLec
 
   const updateCourse = (updatedCourse: Course) => {
       setCourses(courses.map(c => c.id === updatedCourse.id ? updatedCourse : c));
+  };
+
+  const updateCourseColor = (course: Course, color: string) => {
+      updateCourse({ ...course, color });
   };
 
   const addStaff = (course: Course) => {
@@ -162,14 +174,30 @@ const Courses: React.FC<CoursesProps> = ({ courses, lectures, setCourses, setLec
 
             <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-4">
-                    <div className={`w-14 h-14 ${course.color} rounded-2xl flex items-center justify-center text-white shadow-md`}>
-                    <Book className="w-7 h-7" />
+                    <div className={`w-14 h-14 ${course.color} rounded-2xl flex items-center justify-center text-white shadow-md transition-colors`}>
+                        <Book className="w-7 h-7" />
                     </div>
                     <div>
-                    <h2 className="text-3xl font-bold text-slate-800">{course.title}</h2>
-                    <p className="text-slate-500">
-                        {backlog.length} classes to catch up • {courseTasks.length} tasks
-                    </p>
+                        <h2 className="text-3xl font-bold text-slate-800">{course.title}</h2>
+                        <div className="flex items-center gap-4 text-slate-500 mt-1">
+                            <span>{backlog.length} classes to catch up</span>
+                            <span>•</span>
+                            <span>{courseTasks.length} tasks</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Color Picker */}
+                <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
+                    <Palette className="w-4 h-4 text-slate-400 ml-1" />
+                    <div className="flex gap-1">
+                        {availableColors.map(color => (
+                            <button
+                                key={color}
+                                onClick={() => updateCourseColor(course, color)}
+                                className={`w-5 h-5 rounded-full ${color} transition-transform hover:scale-110 ${course.color === color ? 'ring-2 ring-offset-2 ring-slate-400' : ''}`}
+                            />
+                        ))}
                     </div>
                 </div>
             </div>
@@ -318,20 +346,20 @@ const Courses: React.FC<CoursesProps> = ({ courses, lectures, setCourses, setLec
                                     key={task.id}
                                     onClick={() => setView({ type: 'task_detail', taskId: task.id })}
                                     className={`group bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex items-center gap-4 cursor-pointer ${
-                                    task.completed ? 'opacity-60 bg-slate-50' : ''
+                                    task.status === 'Done' ? 'opacity-60 bg-slate-50' : ''
                                     }`}
                                 >
                                     <button
                                         onClick={(e) => { e.stopPropagation(); toggleTask(task.id); }}
                                         className={`flex-shrink-0 transition-colors ${
-                                            task.completed ? 'text-emerald-500' : 'text-slate-300 hover:text-primary-500'
+                                            task.status === 'Done' ? 'text-emerald-500' : 'text-slate-300 hover:text-primary-500'
                                         }`}
                                     >
-                                        {task.completed ? <CheckCircle className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
+                                        {task.status === 'Done' ? <CheckCircle className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
                                     </button>
                                     
                                     <div className="flex-1 min-w-0">
-                                        <p className={`font-medium truncate ${task.completed ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                                        <p className={`font-medium truncate ${task.status === 'Done' ? 'line-through text-slate-500' : 'text-slate-800'}`}>
                                             {task.title}
                                         </p>
                                     </div>
@@ -541,7 +569,7 @@ const Courses: React.FC<CoursesProps> = ({ courses, lectures, setCourses, setLec
                 >
                     <div className={`absolute top-0 right-0 w-24 h-24 ${course.color} opacity-10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110`} />
                     
-                    <div className={`w-12 h-12 ${course.color} rounded-xl flex items-center justify-center text-white mb-4 shadow-sm relative`}>
+                    <div className={`w-12 h-12 ${course.color} rounded-xl flex items-center justify-center text-white mb-4 shadow-sm relative transition-colors`}>
                         <Book className="w-6 h-6" />
                         {backlogCount > 0 && (
                             <div className="absolute -top-2 -right-2 bg-rose-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
