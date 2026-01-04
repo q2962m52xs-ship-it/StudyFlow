@@ -130,7 +130,7 @@ export const getTaskAdvice = async (taskTitle: string, description?: string): Pr
    }
 }
 
-export const parseScheduleImage = async (base64Image: string): Promise<any[]> => {
+export const parseScheduleImage = async (base64Image: string, mimeType: string = "image/png"): Promise<any[]> => {
   if (!apiKey) throw new Error("API Key missing");
 
   try {
@@ -149,10 +149,10 @@ export const parseScheduleImage = async (base64Image: string): Promise<any[]> =>
     Ignore headers or non-class text.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-flash-latest",
       contents: {
         parts: [
-          { inlineData: { mimeType: "image/png", data: base64Image } },
+          { inlineData: { mimeType: mimeType, data: base64Image } },
           { text: prompt }
         ]
       },
@@ -177,7 +177,14 @@ export const parseScheduleImage = async (base64Image: string): Promise<any[]> =>
     });
 
     if (response.text) {
-      return JSON.parse(response.text);
+      // Clean potential markdown code blocks
+      let cleanText = response.text.trim();
+      if (cleanText.startsWith('```json')) {
+          cleanText = cleanText.replace(/^```json/, '').replace(/```$/, '');
+      } else if (cleanText.startsWith('```')) {
+          cleanText = cleanText.replace(/^```/, '').replace(/```$/, '');
+      }
+      return JSON.parse(cleanText);
     }
     return [];
   } catch (error) {

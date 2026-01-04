@@ -152,7 +152,7 @@ const Schedule: React.FC<ScheduleProps> = ({ courses, setCourses, schedule, setS
             try {
                 const base64String = reader.result?.toString().split(',')[1];
                 if (base64String) {
-                    const extractedClasses = await parseScheduleImage(base64String);
+                    const extractedClasses = await parseScheduleImage(base64String, file.type);
                     
                     if (extractedClasses && extractedClasses.length > 0) {
                         // Logic to merge into schedule AND create missing courses
