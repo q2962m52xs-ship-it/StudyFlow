@@ -129,3 +129,59 @@ export const getTaskAdvice = async (taskTitle: string, description?: string): Pr
      return "Error generating advice.";
    }
 }
+
+export const parseScheduleImage = async (base64Image: string): Promise<any[]> => {
+  if (!apiKey) throw new Error("API Key missing");
+
+  try {
+    const prompt = `Analyze this image of a course schedule/timetable. 
+    Extract all the classes/sessions.
+    
+    Return a JSON array where each object has:
+    - courseTitle: The name of the course/subject.
+    - type: "Lecture", "Recitation", or "Lab" (guess based on context if not explicit).
+    - dayOfWeek: Number 0-6 where 0 is Sunday, 1 is Monday, etc.
+    - startTime: HH:MM format (24h).
+    - endTime: HH:MM format (24h).
+    - location: Room number or location if available, otherwise empty string.
+    
+    If you see Hebrew days, map them correctly (ראשון=0, שני=1...).
+    Ignore headers or non-class text.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: {
+        parts: [
+          { inlineData: { mimeType: "image/png", data: base64Image } },
+          { text: prompt }
+        ]
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              courseTitle: { type: Type.STRING },
+              type: { type: Type.STRING, enum: ["Lecture", "Recitation", "Lab"] },
+              dayOfWeek: { type: Type.INTEGER },
+              startTime: { type: Type.STRING },
+              endTime: { type: Type.STRING },
+              location: { type: Type.STRING }
+            },
+            required: ["courseTitle", "type", "dayOfWeek", "startTime", "endTime"]
+          }
+        }
+      }
+    });
+
+    if (response.text) {
+      return JSON.parse(response.text);
+    }
+    return [];
+  } catch (error) {
+    console.error("Error parsing schedule image:", error);
+    throw error;
+  }
+};
