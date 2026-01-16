@@ -1,8 +1,9 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { PlannerResponse } from "../types";
 
-const apiKey = process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+// Always use named parameter for apiKey and use process.env.API_KEY directly.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const generateStudyPlan = async (
   subject: string,
@@ -10,10 +11,6 @@ export const generateStudyPlan = async (
   hoursPerDay: number,
   details: string
 ): Promise<PlannerResponse> => {
-  if (!apiKey) {
-    throw new Error("API Key is missing.");
-  }
-
   const prompt = `
     I need a study plan for ${subject}.
     I have ${daysUntilExam} days until my goal/exam.
@@ -68,8 +65,6 @@ export const generateStudyPlan = async (
 };
 
 export const quickExplain = async (concept: string): Promise<string> => {
-    if (!apiKey) return "API Key missing.";
-    
     try {
         const response = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
@@ -83,8 +78,6 @@ export const quickExplain = async (concept: string): Promise<string> => {
 }
 
 export const analyzeLectureNotes = async (notes: string): Promise<{ summary: string; tasks: string[] }> => {
-  if (!apiKey) return { summary: "API Key missing", tasks: [] };
-
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -115,9 +108,52 @@ export const analyzeLectureNotes = async (notes: string): Promise<{ summary: str
   }
 };
 
-export const getTaskAdvice = async (taskTitle: string, description?: string): Promise<string> => {
-   if (!apiKey) return "API Key missing";
+export const parseMoodleContent = async (content: string, isImage: boolean = false, mimeType: string = "image/png"): Promise<any[]> => {
+  const prompt = `Analyze this Moodle content (either text or screenshot). 
+  Identify all academic assignments/tasks and their due dates.
+  
+  Return a JSON array of objects:
+  - title: The name of the assignment.
+  - courseName: The name of the course.
+  - dueDate: YYYY-MM-DD format. If only a relative date is given (e.g. "Tomorrow", "In 2 days"), calculate it based on today's date: ${new Date().toLocaleDateString('en-CA')}.
+  - priority: "High", "Medium", or "Low" based on the deadline urgency.
+  
+  If the text is in Hebrew, keep titles in Hebrew.`;
 
+  try {
+    const contents = isImage 
+      ? { parts: [{ inlineData: { mimeType, data: content } }, { text: prompt }] }
+      : prompt + "\n\nContent: " + content;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: contents,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              courseName: { type: Type.STRING },
+              dueDate: { type: Type.STRING },
+              priority: { type: Type.STRING, enum: ["Low", "Medium", "High"] }
+            },
+            required: ["title", "courseName", "dueDate", "priority"]
+          }
+        }
+      }
+    });
+
+    return JSON.parse(response.text || "[]");
+  } catch (error) {
+    console.error("Error parsing Moodle content:", error);
+    return [];
+  }
+};
+
+export const getTaskAdvice = async (taskTitle: string, description?: string): Promise<string> => {
    try {
      const response = await ai.models.generateContent({
        model: "gemini-3-flash-preview",
@@ -131,8 +167,6 @@ export const getTaskAdvice = async (taskTitle: string, description?: string): Pr
 }
 
 export const parseScheduleImage = async (base64Image: string, mimeType: string = "image/png"): Promise<any[]> => {
-  if (!apiKey) throw new Error("API Key missing");
-
   try {
     const prompt = `Analyze this image of a course schedule/timetable. 
     Extract all the classes/sessions.
@@ -149,7 +183,8 @@ export const parseScheduleImage = async (base64Image: string, mimeType: string =
     Ignore headers or non-class text.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
+      // Use gemini-3-flash-preview for general tasks including image analysis as per guidelines.
+      model: "gemini-3-flash-preview",
       contents: {
         parts: [
           { inlineData: { mimeType: mimeType, data: base64Image } },
@@ -177,13 +212,7 @@ export const parseScheduleImage = async (base64Image: string, mimeType: string =
     });
 
     if (response.text) {
-      // Clean potential markdown code blocks
       let cleanText = response.text.trim();
-      if (cleanText.startsWith('```json')) {
-          cleanText = cleanText.replace(/^```json/, '').replace(/```$/, '');
-      } else if (cleanText.startsWith('```')) {
-          cleanText = cleanText.replace(/^```/, '').replace(/```$/, '');
-      }
       return JSON.parse(cleanText);
     }
     return [];

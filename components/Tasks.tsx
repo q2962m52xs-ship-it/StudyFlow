@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { Plus, Search, Calendar, Tag, AlertCircle, CheckCircle2, Circle, LayoutGrid, List, X, Briefcase } from 'lucide-react';
+
+import React, { useState, useRef } from 'react';
+import { Plus, Search, Calendar, Tag, AlertCircle, CheckCircle2, Circle, LayoutGrid, List, X, Briefcase, Share2, Loader2, Camera, ClipboardPaste } from 'lucide-react';
 import { Task, ViewState, TaskStatus, TaskPriority, Course } from '../types';
+import { parseMoodleContent } from '../services/geminiService';
 
 interface TasksProps {
   tasks: Task[];
@@ -15,6 +17,10 @@ const Tasks: React.FC<TasksProps> = ({ tasks, courses, setTasks, setView }) => {
   const [groupBy, setGroupBy] = useState<GroupBy>('Status');
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [moodleText, setMoodleText] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New Task Form State
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -22,7 +28,6 @@ const Tasks: React.FC<TasksProps> = ({ tasks, courses, setTasks, setView }) => {
   const [newTaskDate, setNewTaskDate] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>('Medium');
 
-  // Helper to get columns based on grouping
   const getColumns = (): string[] => {
     if (groupBy === 'Status') return ['Not Started', 'In Progress', 'Stuck', 'Done'];
     if (groupBy === 'Priority') return ['High', 'Medium', 'Low'];
@@ -39,7 +44,6 @@ const Tasks: React.FC<TasksProps> = ({ tasks, courses, setTasks, setView }) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
 
-    // Find course name if selected
     const selectedCourse = courses.find(c => c.id === newTaskCourseId);
     const category = selectedCourse ? selectedCourse.title : 'General';
 
@@ -50,7 +54,7 @@ const Tasks: React.FC<TasksProps> = ({ tasks, courses, setTasks, setView }) => {
       priority: newTaskPriority,
       category: category,
       courseId: newTaskCourseId || undefined,
-      dueDate: newTaskDate || new Date().toISOString().split('T')[0],
+      dueDate: newTaskDate || new Date().toLocaleDateString('en-CA'),
       subtasks: [],
       attachments: []
     };
@@ -58,6 +62,51 @@ const Tasks: React.FC<TasksProps> = ({ tasks, courses, setTasks, setView }) => {
     setTasks([...tasks, newTask]);
     resetForm();
     setIsModalOpen(false);
+  };
+
+  const handleMoodleImport = async (content: string, isImage: boolean = false, mimeType: string = "") => {
+    setIsImporting(true);
+    try {
+      const extracted = await parseMoodleContent(content, isImage, mimeType);
+      if (extracted.length > 0) {
+        const newTasks: Task[] = extracted.map((item: any) => {
+          const course = courses.find(c => c.title.toLowerCase() === item.courseName.toLowerCase());
+          return {
+            id: Date.now().toString() + Math.random(),
+            title: item.title,
+            status: 'Not Started',
+            priority: item.priority as TaskPriority,
+            category: item.courseName,
+            courseId: course?.id,
+            dueDate: item.dueDate,
+            subtasks: [],
+            attachments: []
+          };
+        });
+        setTasks(prev => [...prev, ...newTasks]);
+        alert(`Successfully imported ${newTasks.length} tasks!`);
+        setIsImportModalOpen(false);
+        setMoodleText('');
+      } else {
+        alert("No tasks could be identified. Try copying more content.");
+      }
+    } catch (e) {
+      alert("Error parsing content. Please try again.");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result?.toString().split(',')[1];
+        if (base64) handleMoodleImport(base64, true, file.type);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const resetForm = () => {
@@ -71,7 +120,6 @@ const Tasks: React.FC<TasksProps> = ({ tasks, courses, setTasks, setView }) => {
     return tasks.filter(task => {
       const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
-
       if (groupBy === 'Status') return task.status === columnValue;
       if (groupBy === 'Priority') return task.priority === columnValue;
       if (groupBy === 'Course') return (task.category || 'General') === columnValue;
@@ -79,12 +127,9 @@ const Tasks: React.FC<TasksProps> = ({ tasks, courses, setTasks, setView }) => {
     });
   };
 
-  // Helper to map Tailwind bg color to a lighter tint and border
   const getCourseStyles = (courseId?: string) => {
       const course = courses.find(c => c.id === courseId);
       if (!course) return { bg: 'bg-white', border: 'border-slate-200', text: 'text-slate-700' };
-
-      // Map primary colors to their tints
       const colorMap: Record<string, { bg: string, border: string, text: string }> = {
           'bg-blue-500': { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700' },
           'bg-emerald-500': { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700' },
@@ -95,7 +140,6 @@ const Tasks: React.FC<TasksProps> = ({ tasks, courses, setTasks, setView }) => {
           'bg-cyan-500': { bg: 'bg-cyan-50', border: 'border-cyan-200', text: 'text-cyan-700' },
           'bg-teal-500': { bg: 'bg-teal-50', border: 'border-teal-200', text: 'text-teal-700' },
       };
-
       return colorMap[course.color] || { bg: 'bg-white', border: 'border-slate-200', text: 'text-slate-700' };
   };
 
@@ -129,17 +173,13 @@ const Tasks: React.FC<TasksProps> = ({ tasks, courses, setTasks, setView }) => {
                  ))}
              </div>
              
-             <div className="relative">
-                 <Search className="absolute left-3 top-2.5 text-slate-400 w-4 h-4" />
-                 <input 
-                    type="text" 
-                    placeholder="Search tasks..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white border focus:border-primary-300 rounded-lg text-sm outline-none w-full md:w-64 transition-all"
-                 />
-             </div>
-             
+             <button 
+                onClick={() => setIsImportModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors"
+             >
+                 <Share2 className="w-4 h-4" /> Import from Moodle
+             </button>
+
              <button 
                 onClick={() => setIsModalOpen(true)}
                 className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium shadow-sm transition-colors"
@@ -193,28 +233,14 @@ const Tasks: React.FC<TasksProps> = ({ tasks, courses, setTasks, setView }) => {
                                             {task.title}
                                         </h4>
                                         
-                                        {task.description && (
-                                            <p className="text-xs text-slate-500 line-clamp-2 mb-3">
-                                                {task.description}
-                                            </p>
-                                        )}
-
                                         <div className="flex items-center justify-between mt-3 pt-3 border-t border-black/5">
                                             <div className={`flex items-center gap-1 text-xs font-medium ${styles.text}`}>
                                                 <Tag className="w-3 h-3" />
                                                 <span className="truncate max-w-[80px]">{task.category}</span>
                                             </div>
-                                            
-                                            {task.subtasks.length > 0 && (
-                                                <div className="flex items-center gap-1 text-xs font-medium text-slate-600">
-                                                    <List className="w-3 h-3" />
-                                                    {task.subtasks.filter(st => st.completed).length}/{task.subtasks.length}
-                                                </div>
-                                            )}
-
                                             {task.dueDate && (
                                                 <div className="flex items-center gap-1 text-xs text-slate-500 bg-white/50 px-1.5 py-0.5 rounded">
-                                                    <Calendar className="w-3 h-3" /> {task.dueDate.split('-').slice(1).join('/')}
+                                                    <Calendar className="w-3 h-3" /> {task.dueDate}
                                                 </div>
                                             )}
                                         </div>
@@ -227,6 +253,66 @@ const Tasks: React.FC<TasksProps> = ({ tasks, courses, setTasks, setView }) => {
               })}
           </div>
       </div>
+
+      {/* Moodle Import Modal */}
+      {isImportModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-fade-in border border-slate-100">
+                  <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-indigo-50/30">
+                      <div>
+                        <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
+                            <Share2 className="w-5 h-5" /> Import from Moodle
+                        </h3>
+                        <p className="text-xs text-indigo-600 font-medium">AI identifies tasks from text or screenshots</p>
+                      </div>
+                      <button onClick={() => setIsImportModalOpen(false)} className="p-2 hover:bg-white rounded-full transition-colors"><X className="w-5 h-5" /></button>
+                  </div>
+                  
+                  <div className="p-6 space-y-5">
+                      <div className="flex gap-4">
+                         <button 
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex-1 flex flex-col items-center justify-center gap-3 p-6 border-2 border-dashed border-indigo-100 rounded-2xl hover:bg-indigo-50/50 transition-colors group"
+                         >
+                            <Camera className="w-8 h-8 text-indigo-400 group-hover:text-indigo-600" />
+                            <div className="text-center">
+                                <span className="block text-sm font-bold text-indigo-900">Upload Screenshot</span>
+                                <span className="text-[10px] text-indigo-500">Of your Moodle assignments page</span>
+                            </div>
+                            <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*" />
+                         </button>
+
+                         <div className="flex-1 flex flex-col gap-3">
+                             <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/30">
+                                <ClipboardPaste className="w-8 h-8 text-slate-300" />
+                                <div className="text-center">
+                                    <span className="block text-sm font-bold text-slate-800">Paste Text Below</span>
+                                    <span className="text-[10px] text-slate-400">Copy all text from dashboard</span>
+                                </div>
+                             </div>
+                         </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <textarea 
+                            value={moodleText}
+                            onChange={e => setMoodleText(e.target.value)}
+                            placeholder="Paste Moodle dashboard text here..."
+                            className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 transition-all text-sm resize-none"
+                        />
+                      </div>
+
+                      <button 
+                        onClick={() => handleMoodleImport(moodleText)}
+                        disabled={isImporting || !moodleText.trim()}
+                        className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 disabled:opacity-50 flex items-center justify-center gap-3"
+                      >
+                          {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Plus className="w-5 h-5" /> Import These Tasks</>}
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* Add Task Modal */}
       {isModalOpen && (
